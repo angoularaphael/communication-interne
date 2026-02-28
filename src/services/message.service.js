@@ -1,0 +1,243 @@
+const { ObjectId } = require('mongodb');
+const { getDb } = require('../config/mongodb');
+const productsClient = require('./productsClient');
+const { BadRequestError, NotFoundError } = require('../utils/errors');
+
+function generateThreadCode(adId, userA, userB) {
+  const sorted = [userA, userB].sort();
+  return `${adId}_${sorted[0]}_${sorted[1]}`;
+}
+
+function col() {
+  return getDb().collection('messages');
+}
+
+function formatMessage(doc) {
+  if (!doc) return null;
+  const msg = { ...doc };
+  msg.messageId = doc._id ? String(doc._id) : null;
+  return msg;
+}
+
+async function sendMessage(senderId, adId, content) {
+  if (!content || !content.trim()) {
+    throw new BadRequestError('Le contenu du message est requis');
+  }
+
+  const productData = await productsClient.getProduct(adId);
+  const product = productData.product || productData;
+  const sellerId = product.seller_id || product.sellerId;
+
+  if (!sellerId) {
+    throw new NotFoundError('Annonce introuvable ou vendeur non identifié');
+  }
+
+  let receiverId;
+
+  if (senderId === sellerId) {
+    const existing = await col().findOne(
+      { ad_id: adId, deleted: false, $or: [{ sender_id: senderId }, { receiver_id: senderId }] },
+      { sort: { created_at: -1 } }
+    );
+
+    if (!existing) {
+      throw new BadRequestError('Aucune conversation existante pour cette annonce. Le vendeur ne peut pas initier la conversation.');
+    }
+
+    receiverId = existing.sender_id === senderId ? existing.receiver_id : existing.sender_id;
+  } else {
+    receiverId = sellerId;
+  }
+
+  const threadCode = generateThreadCode(adId, senderId, receiverId);
+
+  const message = {
+    ad_id: adId,
+    thread_code: threadCode,
+    sender_id: senderId,
+    receiver_id: receiverId,
+    content: content.trim(),
+    is_read: false,
+    deleted: false,
+    created_at: new Date()
+  };
+
+  const result = await col().insertOne(message);
+  message._id = result.insertedId;
+  return formatMessage(message);
+}
+
+async function getInbox(userId, page = 1, limit = 20) {
+  const skip = (page - 1) * limit;
+
+  const pipeline = [
+    {
+      $match: {
+        deleted: false,
+        $or: [{ sender_id: userId }, { receiver_id: userId }]
+      }
+    },
+    { $sort: { created_at: -1 } },
+    {
+      $group: {
+        _id: '$thread_code',
+        ad_id: { $first: '$ad_id' },
+        last_message: { $first: '$$ROOT' },
+        total_messages: { $sum: 1 },
+        unread_count: {
+          $sum: {
+            $cond: [
+              { $and: [{ $eq: ['$receiver_id', userId] }, { $eq: ['$is_read', false] }] },
+              1,
+              0
+            ]
+          }
+        }
+      }
+    },
+    { $sort: { 'last_message.created_at': -1 } },
+    {
+      $facet: {
+        threads: [{ $skip: skip }, { $limit: limit }],
+        total: [{ $count: 'count' }]
+      }
+    }
+  ];
+
+  const [result] = await col().aggregate(pipeline).toArray();
+
+  const threads = result.threads || [];
+  const total = result.total[0]?.count || 0;
+
+  const formatted = threads.map(t => ({
+    thread_code: t._id,
+    ad_id: t.ad_id,
+    last_message: {
+      _id: t.last_message._id,
+      messageId: t.last_message._id?.toString?.(),
+      sender_id: t.last_message.sender_id,
+      receiver_id: t.last_message.receiver_id,
+      content: t.last_message.content,
+      is_read: t.last_message.is_read,
+      created_at: t.last_message.created_at
+    },
+    total_messages: t.total_messages,
+    unread_count: t.unread_count
+  }));
+
+  return {
+    threads: formatted,
+    pagination: {
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit)
+    }
+  };
+}
+
+async function getAdMessages(userId, adId) {
+  const sample = await col().findOne({
+    ad_id: adId,
+    deleted: false,
+    $or: [{ sender_id: userId }, { receiver_id: userId }]
+  });
+
+  if (!sample) {
+    return { messages: [], thread_code: null };
+  }
+
+  const threadCode = sample.thread_code;
+
+  const rawMessages = await col()
+    .find({ thread_code: threadCode, deleted: false })
+    .sort({ created_at: 1 })
+    .toArray();
+
+  await col().updateMany(
+    { thread_code: threadCode, receiver_id: userId, is_read: false, deleted: false },
+    { $set: { is_read: true } }
+  );
+
+  const messages = rawMessages.map(formatMessage);
+  return { messages, thread_code: threadCode };
+}
+
+async function getThread(userId, threadCode) {
+  const rawMessages = await col()
+    .find({ thread_code: threadCode, deleted: false })
+    .sort({ created_at: 1 })
+    .toArray();
+
+  if (rawMessages.length === 0) {
+    throw new NotFoundError('Conversation introuvable');
+  }
+
+  const isParticipant = rawMessages.some(
+    m => m.sender_id === userId || m.receiver_id === userId
+  );
+  if (!isParticipant) {
+    throw new NotFoundError('Conversation introuvable');
+  }
+
+  await col().updateMany(
+    { thread_code: threadCode, receiver_id: userId, is_read: false, deleted: false },
+    { $set: { is_read: true } }
+  );
+
+  const messages = rawMessages.map(formatMessage);
+  return { messages, thread_code: threadCode };
+}
+
+async function markAsRead(userId, messageId) {
+  let oid;
+  try {
+    oid = new ObjectId(messageId);
+  } catch (_e) {
+    throw new BadRequestError('ID de message invalide');
+  }
+
+  const result = await col().updateOne(
+    { _id: oid, receiver_id: userId, deleted: false },
+    { $set: { is_read: true } }
+  );
+
+  if (result.matchedCount === 0) {
+    throw new NotFoundError('Message introuvable');
+  }
+
+  return { updated: true };
+}
+
+async function getUnreadCount(userId) {
+  const count = await col().countDocuments({
+    receiver_id: userId,
+    is_read: false,
+    deleted: false
+  });
+  return { unread_count: count };
+}
+
+async function countMessagesForAd(adId) {
+  const count = await col().countDocuments({ ad_id: adId, deleted: false });
+  return { ad_id: adId, count };
+}
+
+async function softDeleteAdMessages(adId) {
+  const result = await col().updateMany(
+    { ad_id: adId, deleted: false },
+    { $set: { deleted: true } }
+  );
+  return { ad_id: adId, deleted_count: result.modifiedCount };
+}
+
+module.exports = {
+  sendMessage,
+  getInbox,
+  getAdMessages,
+  getThread,
+  markAsRead,
+  getUnreadCount,
+  countMessagesForAd,
+  softDeleteAdMessages
+};
