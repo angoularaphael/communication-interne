@@ -47,4 +47,9 @@ async function validateToken(accessToken) {
   return callAuth('POST', '/internal/validate-token', { accessToken });
 }
 
-module.exports = { validateToken };
+async function getUser(userId) {
+  const res = await callAuth('GET', `/internal/users/${userId}`);
+  return res.user ? { user: res.user } : res;
+}
+
+module.exports = { validateToken, getUser };

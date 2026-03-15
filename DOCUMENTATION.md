@@ -1,3 +1,43 @@
+# Messaging-service
+
+## Rôle
+Messagerie acheteur/vendeur par annonce, conversations REST + diffusion temps réel WebSocket.
+
+## Mise à jour 2026-03 (entrée API)
+- Accès HTTP client recommandé via `Auth-service` (`/api/v1/messages/*`).
+- Les tokens restent validés côté service pour l'upgrade WebSocket.
+
+## Port et santé
+- Port par défaut: `3006`
+- Healthcheck: `GET /health`
+- WebSocket: `ws://host:3006/ws?token=ACCESS_TOKEN`
+
+## Variables d'environnement (canoniques)
+- `PORT`, `NODE_ENV`
+- `MONGO_URI`, `MONGO_DB_NAME`
+- `AUTH_SERVICE_URL`, `PRODUCTS_SERVICE_URL`, `INTER_SERVICE_KEY`
+- `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX_REQUESTS`
+
+## Routes publiques (`/api/v1/messages`)
+- `GET /inbox`
+- `GET /unread/count`
+- `GET /thread/:threadCode`
+- `PUT /:messageId/read`
+- `POST /:adId`
+- `GET /:adId`
+
+## Routes internes (`/internal`, protégées X-Service-Key)
+- `GET /messages/ad/:adId/count`
+- `DELETE /messages/ad/:adId`
+
+## Dépendances
+- MongoDB
+- `Auth-service`
+- `Products-service`
+
+## Démarrage
+- Local: `npm run dev`
+- Docker: via `docker compose --env-file .env.docker up --build`
 # Messaging Service — Documentation technique
 
 > Microservice de messagerie pour **DANEBCYS**.  

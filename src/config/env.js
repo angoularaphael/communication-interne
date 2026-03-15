@@ -15,6 +15,7 @@ module.exports = {
 
   AUTH_SERVICE_URL: process.env.AUTH_SERVICE_URL || 'http://localhost:3001',
   PRODUCTS_SERVICE_URL: process.env.PRODUCTS_SERVICE_URL || 'http://localhost:3004',
+  NOTIFICATIONS_SERVICE_URL: process.env.NOTIFICATIONS_SERVICE_URL || 'http://localhost:3010',
   INTER_SERVICE_KEY: process.env.INTER_SERVICE_KEY,
 
   RATE_LIMIT_WINDOW_MS: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 900000,
