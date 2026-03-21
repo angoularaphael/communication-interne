@@ -3,6 +3,8 @@
 ## Rôle
 Messagerie acheteur/vendeur par annonce, conversations REST + diffusion temps réel WebSocket.
 
+**Frontend** : le parcours « fiche produit → contacter le vendeur / chat » a été retiré du client Angular marketplace ; les **API messagerie** et le comportement backend restent inchangés.
+
 ## Mise à jour 2026-03 (entrée API)
 - Accès HTTP client recommandé via `Auth-service` (`/api/v1/messages/*`).
 - Les tokens restent validés côté service pour l'upgrade WebSocket.
@@ -38,6 +40,12 @@ Messagerie acheteur/vendeur par annonce, conversations REST + diffusion temps r�
 ## Démarrage
 - Local: `npm run dev`
 - Docker: via `docker compose --env-file .env.docker up --build`
+
+## Secrets & configuration
+- **Fichier source** : `Messaging-service/.env` (non versionné par Git).
+- **Copie locale de référence** : `Secrets-Danebcys/Messaging-service/.env`, synchronisée depuis la racine du monorepo avec `.\scripts\sync-secrets-danebcys.ps1` (PowerShell).
+- Ne jamais committer les valeurs sensibles.
+
 # Messaging Service — Documentation technique
 
 > Microservice de messagerie pour **DANEBCYS**.  
