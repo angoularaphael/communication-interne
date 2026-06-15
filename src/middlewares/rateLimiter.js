@@ -1,7 +1,10 @@
+// Rate limiter en mémoire par utilisateur (messages et notifications)
 const env = require('../config/env');
 
+// Compte les requêtes par utilisateur en mémoire
 const store = new Map();
 
+// Nettoie les compteurs expirés toutes les 60 secondes
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of store) {
@@ -9,6 +12,7 @@ setInterval(() => {
   }
 }, 60_000).unref();
 
+// Limite le nombre de requêtes par fenêtre de temps
 function createLimiter({ windowMs, max, keyFn }) {
   return (req, res, next) => {
     const key = keyFn(req);
@@ -43,4 +47,10 @@ const messageLimiter = createLimiter({
   keyFn: (req) => req.user ? `user:${req.user.id}` : null
 });
 
-module.exports = { createLimiter, messageLimiter };
+const notificationLimiter = createLimiter({
+  windowMs: env.RATE_LIMIT_WINDOW_MS,
+  max: env.RATE_LIMIT_MAX_REQUESTS,
+  keyFn: (req) => req.user ? `user:${req.user.id}` : null
+});
+
+module.exports = { createLimiter, messageLimiter, notificationLimiter };

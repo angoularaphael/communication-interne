@@ -1,6 +1,8 @@
+// Authentification JWT via Auth-service (pas de vérification locale)
 const authClient = require('../services/authClient');
 const { UnauthorizedError } = require('../utils/errors');
 
+// Vérifie le token Bearer en appelant auth-service POST /internal/validate-token
 async function authenticate(req, _res, next) {
   try {
     const header = req.headers.authorization;

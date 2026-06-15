@@ -1,7 +1,9 @@
+// Client HTTP vers Auth-service — validation JWT et profils utilisateurs
 const http = require('http');
 const https = require('https');
 const env = require('../config/env');
 
+// Appel HTTP vers auth-service:3001 avec X-Service-Key
 function callAuth(method, path, body = null) {
   return new Promise((resolve, reject) => {
     const url = new URL(env.AUTH_SERVICE_URL);
@@ -43,10 +45,12 @@ function callAuth(method, path, body = null) {
   });
 }
 
+// Vérifie un token via POST /internal/validate-token
 async function validateToken(accessToken) {
   return callAuth('POST', '/internal/validate-token', { accessToken });
 }
 
+// Récupère un utilisateur via GET /internal/users/:userId (enrichissement inbox support)
 async function getUser(userId) {
   const res = await callAuth('GET', `/internal/users/${userId}`);
   return res.user ? { user: res.user } : res;

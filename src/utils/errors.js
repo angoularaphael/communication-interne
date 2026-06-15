@@ -1,3 +1,4 @@
+// Classes d'erreur HTTP pour les handlers Express
 class AppError extends Error {
   constructor(message, statusCode) {
     super(message);

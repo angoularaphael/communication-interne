@@ -1,17 +1,20 @@
+// Logique métier messagerie : fils acheteur/vendeur, support admin, agrégation inbox
 const { ObjectId } = require('mongodb');
 const { getDb } = require('../config/mongodb');
 const productsClient = require('./productsClient');
 const authClient = require('./authClient');
 const { BadRequestError, NotFoundError } = require('../utils/errors');
 
+// Id fictif d'annonce pour les conversations support admin/assistance
 const ADMIN_AD_ID = 'admin';
 
+// Code unique d'un fil entre deux personnes sur une annonce (IDs triés pour stabilité)
 function generateThreadCode(adId, userA, userB) {
   const sorted = [userA, userB].sort();
   return `${adId}_${sorted[0]}_${sorted[1]}`;
 }
 
-/** Un seul thread support par client : tous les admin/assistance partagent le même fil avec ce client */
+// Code du fil support entre l'équipe et un client
 function getSupportThreadCode(clientUserId) {
   return `${ADMIN_AD_ID}_${clientUserId}`;
 }
@@ -20,6 +23,7 @@ function col() {
   return getDb().collection('messages');
 }
 
+// Normalise un document MongoDB vers le format API (messageId string)
 function formatMessage(doc) {
   if (!doc) return null;
   const msg = { ...doc };
@@ -27,6 +31,7 @@ function formatMessage(doc) {
   return msg;
 }
 
+// Envoie un message sur une annonce ; le vendeur est identifié via Products-service
 async function sendMessage(senderId, adId, content) {
   if (!content || !content.trim()) {
     throw new BadRequestError('Le contenu du message est requis');
@@ -43,6 +48,7 @@ async function sendMessage(senderId, adId, content) {
   let receiverId;
 
   if (senderId === sellerId) {
+    // Le vendeur ne peut pas initier — il répond à un acheteur existant
     const existing = await col().findOne(
       { ad_id: adId, deleted: false, $or: [{ sender_id: senderId }, { receiver_id: senderId }] },
       { sort: { created_at: -1 } }
@@ -75,6 +81,7 @@ async function sendMessage(senderId, adId, content) {
   return formatMessage(message);
 }
 
+// Boîte de réception agrégée par fil ; enrichit titres (Products) et noms (Auth)
 async function getInbox(userId, page = 1, limit = 20) {
   const skip = (page - 1) * limit;
 
@@ -174,6 +181,7 @@ async function getInbox(userId, page = 1, limit = 20) {
   };
 }
 
+// Messages d'une annonce ; marque automatiquement comme lus ceux reçus
 async function getAdMessages(userId, adId) {
   const sample = await col().findOne({
     ad_id: adId,
@@ -201,6 +209,7 @@ async function getAdMessages(userId, adId) {
   return { messages, thread_code: threadCode };
 }
 
+// Tous les messages d'un fil ; vérifie que l'utilisateur est participant
 async function getThread(userId, threadCode) {
   const rawMessages = await col()
     .find({ thread_code: threadCode, deleted: false })
@@ -227,6 +236,7 @@ async function getThread(userId, threadCode) {
   return { messages, thread_code: threadCode };
 }
 
+// Marque un message comme lu (destinataire seulement)
 async function markAsRead(userId, messageId) {
   let oid;
   try {
@@ -256,11 +266,13 @@ async function getUnreadCount(userId) {
   return { unread_count: count };
 }
 
+// Compte les messages d'une annonce (route interne, ex. suppression produit)
 async function countMessagesForAd(adId) {
   const count = await col().countDocuments({ ad_id: adId, deleted: false });
   return { ad_id: adId, count };
 }
 
+// Supprime logiquement tous les messages d'une annonce
 async function softDeleteAdMessages(adId) {
   const result = await col().updateMany(
     { ad_id: adId, deleted: false },
@@ -269,6 +281,7 @@ async function softDeleteAdMessages(adId) {
   return { ad_id: adId, deleted_count: result.modifiedCount };
 }
 
+// Démarre une conversation support avec un client
 async function adminStartConversation(adminId, targetUserId, content) {
   const threadCode = getSupportThreadCode(targetUserId);
   const existing = await col().findOne({ thread_code: threadCode, deleted: false });
@@ -331,6 +344,7 @@ async function adminSendMessage(adminId, targetUserId, content) {
   return formatMessage(msg);
 }
 
+// Envoie dans un fil existant (annonce ou support) — routage spécial pour le support
 async function sendMessageInThread(userId, threadCode, content) {
   if (!content || !content.trim()) {
     throw new BadRequestError('Le contenu du message est requis');
@@ -345,6 +359,7 @@ async function sendMessageInThread(userId, threadCode, content) {
   if (existing.ad_id === ADMIN_AD_ID) {
     const clientId = threadCode.startsWith(ADMIN_AD_ID + '_') ? threadCode.slice(ADMIN_AD_ID.length + 1) : null;
     if (userId === clientId) {
+      // Le client répond au dernier agent support ayant écrit dans le fil
       const lastStaff = await col().findOne(
         { thread_code: threadCode, sender_id: { $ne: userId }, deleted: false },
         { sort: { created_at: -1 }, projection: { sender_id: 1 } }
@@ -373,6 +388,7 @@ async function sendMessageInThread(userId, threadCode, content) {
   return formatMessage(msg);
 }
 
+// Envoie le même message support à plusieurs utilisateurs
 async function adminBroadcast(senderId, userIds, content) {
   if (!content || !content.trim()) throw new BadRequestError('Le contenu du message est requis');
   if (!Array.isArray(userIds) || userIds.length === 0) throw new BadRequestError('Aucun destinataire sélectionné');

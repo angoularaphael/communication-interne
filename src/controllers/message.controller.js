@@ -1,12 +1,14 @@
+// Handlers HTTP pour la messagerie acheteur/vendeur et le support admin
 const messageService = require('../services/message.service');
 const { broadcastToUser } = require('../websocket/wsServer');
 const notificationsClient = require('../services/notificationsClient');
 
+// POST /api/v1/messages/:adId — envoie un message lié à une annonce
 async function sendMessage(req, res, next) {
   try {
     const { content } = req.body;
     const message = await messageService.sendMessage(req.user.id, req.params.adId, content);
-    // Diffusion temps réel au destinataire via WebSocket
+    // Pousse le message en temps réel au destinataire connecté
     broadcastToUser(message.receiver_id, {
       type: 'new_message',
       message: {
@@ -27,6 +29,7 @@ async function sendMessage(req, res, next) {
   }
 }
 
+// GET /api/v1/messages/inbox — fils de conversation de l'utilisateur
 async function getInbox(req, res, next) {
   try {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
@@ -38,6 +41,7 @@ async function getInbox(req, res, next) {
   }
 }
 
+// GET /api/v1/messages/:adId — messages d'une annonce
 async function getAdMessages(req, res, next) {
   try {
     const result = await messageService.getAdMessages(req.user.id, req.params.adId);
@@ -47,6 +51,7 @@ async function getAdMessages(req, res, next) {
   }
 }
 
+// GET /api/v1/messages/thread/:threadCode — tous les messages d'un fil
 async function getThread(req, res, next) {
   try {
     const result = await messageService.getThread(req.user.id, req.params.threadCode);
@@ -56,6 +61,7 @@ async function getThread(req, res, next) {
   }
 }
 
+// PUT /api/v1/messages/:messageId/read — marque un message comme lu
 async function markAsRead(req, res, next) {
   try {
     const result = await messageService.markAsRead(req.user.id, req.params.messageId);
@@ -65,6 +71,7 @@ async function markAsRead(req, res, next) {
   }
 }
 
+// GET /api/v1/messages/unread/count — messages non lus
 async function getUnreadCount(req, res, next) {
   try {
     const result = await messageService.getUnreadCount(req.user.id);
@@ -74,6 +81,7 @@ async function getUnreadCount(req, res, next) {
   }
 }
 
+// GET /internal/messages/ad/:adId/count — nombre de messages (autres services)
 async function countMessagesForAd(req, res, next) {
   try {
     const result = await messageService.countMessagesForAd(req.params.adId);
@@ -83,6 +91,7 @@ async function countMessagesForAd(req, res, next) {
   }
 }
 
+// DELETE /internal/messages/ad/:adId — supprime les messages d'une annonce (logique)
 async function softDeleteAdMessages(req, res, next) {
   try {
     const result = await messageService.softDeleteAdMessages(req.params.adId);
@@ -92,6 +101,7 @@ async function softDeleteAdMessages(req, res, next) {
   }
 }
 
+// POST /api/v1/messages/admin/start/:userId — démarre une conversation support
 async function adminStartConversation(req, res, next) {
   try {
     const content = req.body?.content;
@@ -102,6 +112,7 @@ async function adminStartConversation(req, res, next) {
   }
 }
 
+// POST /api/v1/messages/admin/send/:userId — message support vers un utilisateur
 async function adminSendMessage(req, res, next) {
   try {
     const { content } = req.body;
@@ -126,6 +137,7 @@ async function adminSendMessage(req, res, next) {
   }
 }
 
+// POST /api/v1/messages/thread/:threadCode/send — envoie dans un fil existant
 async function sendMessageInThread(req, res, next) {
   try {
     const { content } = req.body;
@@ -150,6 +162,7 @@ async function sendMessageInThread(req, res, next) {
   }
 }
 
+// POST /api/v1/messages/admin/broadcast — message support à plusieurs utilisateurs
 async function adminBroadcast(req, res, next) {
   try {
     const { userIds, content } = req.body;

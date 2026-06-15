@@ -1,3 +1,4 @@
+// Routes publiques messagerie sous /api/v1/messages (proxifiées par Auth-service)
 const { Router } = require('express');
 const { authenticate } = require('../middlewares/auth');
 const { requireAdminOrAssistance } = require('../middlewares/adminAuth');
@@ -17,6 +18,7 @@ router.post('/thread/:threadCode/send', ctrl.sendMessageInThread);
 router.post('/:adId', ctrl.sendMessage);
 router.get('/:adId', ctrl.getAdMessages);
 
+// Sous-routes support admin et assistance
 const adminRouter = Router();
 adminRouter.use(requireAdminOrAssistance);
 adminRouter.post('/start/:userId', ctrl.adminStartConversation);

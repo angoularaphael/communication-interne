@@ -1,7 +1,9 @@
+// Client HTTP vers Products-service — contexte annonce pour la messagerie
 const http = require('http');
 const https = require('https');
 const env = require('../config/env');
 
+// Appel HTTP vers products-service:3004 avec X-Service-Key
 function callProducts(method, path, body = null) {
   return new Promise((resolve, reject) => {
     const url = new URL(env.PRODUCTS_SERVICE_URL);
@@ -43,6 +45,7 @@ function callProducts(method, path, body = null) {
   });
 }
 
+// Récupère une annonce via GET /internal/products/:productId
 async function getProduct(productId) {
   return callProducts('GET', `/internal/products/${productId}`);
 }

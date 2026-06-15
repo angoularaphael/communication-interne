@@ -1,13 +1,11 @@
+// Serveur WebSocket temps réel — new_message et new_notification par utilisateur
 const { WebSocketServer } = require('ws');
 const authClient = require('../services/authClient');
 
-/** Map userId -> Set<WebSocket> */
+// Connexions actives par utilisateur (plusieurs onglets/appareils possibles)
 const userSockets = new Map();
 
-/**
- * Attache le serveur WebSocket au serveur HTTP.
- * Route : ws://host:port/ws?token=ACCESS_TOKEN
- */
+// Attache le WebSocket sur /ws ; authentifie via token JWT (Auth-service)
 function attachWebSocket(server) {
   const wss = new WebSocketServer({
     noServer: true,
@@ -77,16 +75,14 @@ function attachWebSocket(server) {
   return wss;
 }
 
-/**
- * Envoie un payload à tous les WebSockets connectés d'un utilisateur.
- * Utilisé quand un nouveau message est reçu (destinataire = userId).
- */
+// Envoie un payload JSON à tous les sockets ouverts d'un utilisateur
 function broadcastToUser(userId, payload) {
   const set = userSockets.get(userId);
   if (!set) return;
 
   const data = typeof payload === 'string' ? payload : JSON.stringify(payload);
   for (const ws of set) {
+    // readyState 1 = OPEN
     if (ws.readyState === 1) {
       ws.send(data);
     }
